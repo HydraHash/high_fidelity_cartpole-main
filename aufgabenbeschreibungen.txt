@@ -42,28 +42,51 @@ https://en.wikipedia.org/wiki/Q-learning
 https://www.tensorflow.org/agents/api_docs/python/tf_agents/agents/DqnAgent
 https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 
-Auch bei pytorch gibts eine gp, gpflow 
-System identific von gprat ist regression, dass man am ende prediction stetig / kontrinuierlich machen
-Wenn nur auf Actions mapped, GP classification 
-Alternativ für jede Action nen GP aufsetzen und dann größter wert
 
-Anfangen: GP ersetzten dass software funktioniert, parameter und kernel völlig egal wie optimiert werden
+Gaussian Process Regression (GPR) kann auch mit PyTorch implementiert werden. Besonders die Bibliothek `gpytorch` bietet eine Implementierung.
 
-Timestep muss aus meiner funktion auch reingegeben werden, Observation 4 Werte sind Position, 1. abl geschwindigkeit, winkel, winkelgeschw
+Die Systemidentifikation im Kontext von GPR ist grundsätzlich eine Regressionsaufgabe, bei der schließlich kontinuierliche Vorhersagen erstellt werden 
+sollen.
 
-Trainingsdaten generieren: actions steps vorgeben zeile 51 in gen_video  , werte eingeben und daraus kraftprofile erstellen usw. 
+Wenn man nur lineare Funktionen (Actions) modellieren möchte, kann man auch einen Gaussian Process für die Classification verwenden. Eine Alternative 
+besteht darin, für jede einzelne Ausgangsvariable (z.B. Kraft in einer bestimmten Richtung), einen eigenen Gaussian Process aufzusetzen und dann deren 
+maximalen Wert als Vorhersage zu nutzen.
 
-Motivation: Trainingszeiten im Kontext von Strom brauchen usw   also prediction time wäre ideal, wenn nur trainingszeit dann halt des oder weniger trainingsdaten wäre auch n gutes Ergebnis
+Zum Anfang sollte man versuchen, eine Software mit GPs aufzubauen, die ohne vorgegebene Parameter- oder Kernelschem funktioniert – diese Parameter und 
+der Kernel sollten völlig egal sein und nur optimiert werden, wenn es notwendig ist.
 
+Der Timestep muss aus der Funktion auch übergeben werden. Die vier beobachtbaren Werte (Observation) umfassen die Position sowie Geschwindigkeit und 
+Winkelgeschw.
 
-Mean function in utils.py in init, hyperparameter und lengthscale zusätzlich zu Kernel, helman page 23 mean function zeile 17 code kernel k,hyperparameter l in 23 ende formel drin, l ist wichtigster hyperparameter
-likelihood noise letzter hyperparam wird auf diagonale von matrix angewendet und bringt etwas rauschen rein in utils? die drei, page 28 oben l=1 ist idealfall für diese drei parameter
-page 25 3.9 gleichung aus utils was auskommentiert ist, für später falls hyperparam scheiße sind, aus train methode 
-prediction die eigentliches Ziel ist 3.7 ist identisch mit funktion predict aus utils, ich soll nur matrix aus k bauen
-gpytorch kernel kann auch geändert werden
+Für das Generieren von Trainingsdaten kann man vorgeben, welche Actionschritte im Training berücksichtigt werden sollen. Man muss dann Werte eingeben 
+und daraus Kraftprofile usw. generieren können.
 
-Plots wie in Paper dargestellt aus pytorch, confidence region ist varianz
+Die Motivation dahinter ist u.a., dass Trainingszeiten im Kontext von Stromverbrauch begrenzt sind. Ideal wäre es daher, eine Vorhersagemethode zu 
+haben, die nur kurze Trainingszeiten benötigt – mehr trainingsbezogene Daten wären dann auch ein gutes Ergebnis.
 
-System identification aus buch für generate regressor: zusätzlich zu 4 bekantnen Parametern auch die vom letzten Zeitschritt wären die REgressoren, kann auch 3x gemacht werden - am anfang nur 4 features, dann wenn schlechte Werte 8 usw. 
-NFIR ist aktuell implementiert
+In `utils.py` ist bereits eine Mean-Funktion implementiert. Hyperparameter und Längenskalen (lengthscale) sind zusätzlich zu den Kernen vorgegeben. Wie 
+auf Seite 23 dargestellt, wird die Funktion `helman` gezeigt, wie man eine Mean-Funktion und einen Kernel mit ihren Hyperparametern (`k`, 
+`hyperparameter_l`) definiert.
 
+Der Längenskala-Parameter `l` ist der wichtigste Hyperparameter. In den Trainingsdaten aus Methode 3.9 (in `utils.py`, Zeile kommentiert) sollte man das 
+berücksichtigen.
+
+Die Likelihood-Rauschkomponente (`likelihood noise`) wird schließlich auf die Diagonale der Kovarianzmatrix angewandt, um etwas Rauschen einzubringen – 
+wie in `utils`? Die drei (Parameter?), Seite 28 oben. L=1 ist der ideale Fall für diese drei Parameter.
+
+Die Gleichung aus Methode 3.9 auf Seite 25 (gleichung 3.9) ist auskommentiert und dient als Grundgerüst, falls man Hyperparameter nicht geschickt wählen 
+kann – sie könnte später importiert werden, z.B. aus der Train-Methode.
+
+Die eigentliche Vorhersage (`prediction`) ist das Ziel; dabei handelt es sich um eine kontinuierliche Ausgabe (continuous output). Die Funktion in 
+`utils` für die Vorhersage entspricht im Wesentlichen Gleichung 3.7 und führt tatsächlich nur die Konstruktion der Kovarianzmatrix (`K`) und des 
+Basisvektors (`b`) durch.
+
+Mit `gpytorch` kann man auch den Kernel selbst anpassen oder erweitern.
+
+Für Plots sollte man wie im Paper dargestellt, aus PyTorch (statt GPyTorch) arbeiten. Die Confidence-Region wird als Varianz visualisiert.
+
+Die Systemidentifikation für das Generieren eines Regressors ist in einem Buch beschrieben; zusätzlich zu den 4 bekannten Parametern sollten auch die 
+Parameter des vorherigen Zeitschritts (TimeStep?) berücksichtigt werden. Man könnte dies sogar dreimal machen – mit unterschiedlichen Featuremengen: am 
+Anfang nur 4 Features, dann bei schlechten Werten mehr (z.B. 8).
+
+Derzeit ist eine Nichtlineare Autoregressive (NAR) Implementierung (NFIR?) als Regressor vorhanden.
