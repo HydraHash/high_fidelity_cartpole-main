@@ -1,0 +1,69 @@
+cartpole_env.py:
+	update_state gehts mit der Physik los, returnt aus kraft und aktuellen zustand position
+	
+Zur aufgabenbeschreibung: lernen nahand von einem links  und rechts schwung wies weiter geht
+
+1024 test und training aus beispiele text
+Mit training input und output gp für zeitreihendaten zu machen, stichwort regressoren im Buch - man fragt sich nach den Features wo sind die, die sind lagged-system-states also zurückversetzte datenpunkte (kraft zum vorherigen zeitpunkt mit ableitungen daraus zu bauen) mit trainingsdaten machen und dann mit testdaten abgleichen
+Seite im Buch wo Modelle dazu erklärt werden: Seite 29 Buch pdf 45
+wenn nfir modell nicht funktioniert gehts mit dem narx-modell auf jeden Fall: zusätzlich vorhanden die Output
+erstes Modell y ist nicht in den Features dabei, bei narx ist bei den regressoren auch tatsächlicher output dabei, mit output auf output mappen funktioniert typischerweise gut
+
+Damit muss ich mir feature matrix bauen: daten (zeitreihendaten) input und output nehmen, man bekommt auch wieder zeitreihendaten (was für regressoren, was für kernelfunktionen) im regression example
+GPRat macht genau des als Entry in diese Thematik
+load_data in execute.py generiert die Daten gleich
+in utils.py: daten reinladen, größe 1024 reinladen, anzahl regressoren (das ist non-finite linear response)
+Prinzip: ich bin an stelle i, will feature vec für stelle i mit 4 regressoren, gibt vec mit länge aus mit Zeitpunkt i, i-1, i-2 ... gpytorch reference
+run.sh mit python3 anpassen
+
+prediction ohne var ist diese inverse Seite 12 Buch, covariance matrix invertieren und mit output daten multiplozieren
+
+Dazuimplementieren Visualisierung wie im gpytroch regression example: mean, uncertainty... damit gefühl bekommen wie man gp auf daten fitted und was sinnvolles rauskommt
+
+
+
+Linus:
+Environment und RL Agent als NN, agieren im Feedback Loop, Actions sind ansteuerung vom Kart
+Env spuckt neuen Zustand aus, der wird in Agent gefüttert und agiert damit wieder
+Im Training ist Loop auch so, zusätzlich Reward wie gut (hier cos aus Winkel halbe) winkel 0 ist ideal mit reward 1, zusätlich soll wagen sich in Mitte befinden. RL algo versucht akkumulativ Reward zu maximieren zusammenhängend trajectory
+Deep-Q-Learning für Training (Wikiartikel) Idee: Tabelle versuchen zu lernen, Formel aus algo abschnitt wie man einzelne Zellen updatet, hoffen das Werte iwo hin konvergieren, deepq ersetzt diese Tabelle durch NN, GP ersetzt auch die Tabelle
+Idealfall minimale Korrekturbewegung nach Aufschwingen, sollte mit drin sein
+
+Code: 9 discrete actions werden auf ne Kraft gemapped, cartpole_env Zeile 167 0-3 sind verschieden starke kräfte in links, 4 keine kraft, 5-8 in andere Richtung -> das ist das was policy entscheidet. Gen_video aus 49 fragt Policy was gemacht werden soll, observation basierend auf aktueller Position 
+Eingreifen: funktion schreiben die die Werte 0-8 an zeile 49 zurückgibt auf dem was gelernt wurde und das dann integrieren
+
+Link Tensorflow: algo ist dort schon implementiert, nur NN ersetzen durch GP
+Link Pytorch reinforcement_learning q-learning
+
+Theoretisch Anpassen von Kraftstufen möglich, oder nur zwei Kräfte für Anfang, was für Anfang auch ideal wäre erstmal upright halten da deutlich einfacher
+
+Wenn richtig gemacht ist GP nur Matrix  Multiplikation 
+https://en.wikipedia.org/wiki/Q-learning
+https://www.tensorflow.org/agents/api_docs/python/tf_agents/agents/DqnAgent
+https://docs.pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+
+Auch bei pytorch gibts eine gp, gpflow 
+System identific von gprat ist regression, dass man am ende prediction stetig / kontrinuierlich machen
+Wenn nur auf Actions mapped, GP classification 
+Alternativ für jede Action nen GP aufsetzen und dann größter wert
+
+Anfangen: GP ersetzten dass software funktioniert, parameter und kernel völlig egal wie optimiert werden
+
+Timestep muss aus meiner funktion auch reingegeben werden, Observation 4 Werte sind Position, 1. abl geschwindigkeit, winkel, winkelgeschw
+
+Trainingsdaten generieren: actions steps vorgeben zeile 51 in gen_video  , werte eingeben und daraus kraftprofile erstellen usw. 
+
+Motivation: Trainingszeiten im Kontext von Strom brauchen usw   also prediction time wäre ideal, wenn nur trainingszeit dann halt des oder weniger trainingsdaten wäre auch n gutes Ergebnis
+
+
+Mean function in utils.py in init, hyperparameter und lengthscale zusätzlich zu Kernel, helman page 23 mean function zeile 17 code kernel k,hyperparameter l in 23 ende formel drin, l ist wichtigster hyperparameter
+likelihood noise letzter hyperparam wird auf diagonale von matrix angewendet und bringt etwas rauschen rein in utils? die drei, page 28 oben l=1 ist idealfall für diese drei parameter
+page 25 3.9 gleichung aus utils was auskommentiert ist, für später falls hyperparam scheiße sind, aus train methode 
+prediction die eigentliches Ziel ist 3.7 ist identisch mit funktion predict aus utils, ich soll nur matrix aus k bauen
+gpytorch kernel kann auch geändert werden
+
+Plots wie in Paper dargestellt aus pytorch, confidence region ist varianz
+
+System identification aus buch für generate regressor: zusätzlich zu 4 bekantnen Parametern auch die vom letzten Zeitschritt wären die REgressoren, kann auch 3x gemacht werden - am anfang nur 4 features, dann wenn schlechte Werte 8 usw. 
+NFIR ist aktuell implementiert
+
