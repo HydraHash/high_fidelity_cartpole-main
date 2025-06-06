@@ -68,7 +68,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         self.states = []
 
-
         # Angle at which to fail the classical task
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
         self.x_threshold = x_threshold
@@ -84,9 +83,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             ],
             dtype=np.float32,
         )
-        
         self.action_space = spaces.Discrete(len(self.force_steps) * 2 - 1)
-
 
         #action within state
         if self.action_in_state:
@@ -108,14 +105,9 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.last_reward = 0
 
 
-
-
-    
     def update_state(self, state, force, tau):
         #function implements the actual differential equation and integration
-
         x, x_dot, theta, theta_dot = state
-
         costheta = math.cos(theta)
         sintheta = math.sin(theta)
 
@@ -124,7 +116,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         #sign function can lead to weird results depending on the time-step-width
         #possible replacement is a scaled and parameterized sigmoid
-
         temp = (
             force + self.polemass_length * theta_dot ** 2 * sintheta
             - self.cart_resistance*sign(x_dot)
@@ -135,20 +126,14 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         )
 
         xacc = temp - self.polemass_length * thetaacc * costheta / self.total_mass
-
-
-
         x_dot = x_dot + tau * xacc
         x = x + tau * x_dot
+
         theta_dot = theta_dot*self.pole_resistance + tau * thetaacc
         theta = theta + tau * theta_dot
-
-
         theta = angle_normalize(theta)
 
-
         return (x, x_dot, theta, theta_dot)
-
 
 
     def step(self, action):
@@ -156,10 +141,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         assert self.action_space.contains(action), err_msg
         assert self.state is not None, "Call reset before using step method."
 
-
         action = action - len(self.force_steps) + 1
-
-
 
         if action > 0:
             dir = 1
@@ -168,27 +150,20 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         else:
             dir = 0
 
-
         #motor values to use (0-255)
         force = self.force_steps[abs(action)]
-
 
         #force curve of the cartpole
         force = self.force_curve[0]*force**2 - self.force_curve[1]*force +  self.force_curve[2]
         force *= dir
         
-
         x, x_dot, theta, theta_dot = self.state
-
         if self.discrete_state: 
             old_disc_theta = discretize_angle(theta)
-
 
         #internal finer stepping of the simulation
         for i in range(int(self.tau/self.internal_tau)):
             self.state = self.update_state(self.state, force, self.internal_tau)
-
-
 
         x, x_dot, theta, theta_dot = self.state
 
@@ -206,13 +181,11 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         else:
             out_state = self.state
 
-
         #variable to check, if pole is upright
         if abs(theta) < self.theta_threshold_radians:
             self.swingup_done = True
         elif abs(theta) > self.theta_threshold_radians:
             self.swingup_done = False
-
 
         done = bool(
             x < -self.x_threshold
@@ -226,14 +199,13 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
                 reward = cos(theta / 2) * (1-abs(x)/self.x_threshold)
             else:
                 reward = cos(theta / 2) * (1-abs(x)/self.x_threshold)
+
             #additional addon for training swingup faster 
-            
             if self.swingup and abs(theta) < 5/180*pi:
                 reward += 5
                 if abs(theta_dot) < 6/180*pi:
                     reward += 5
             
-
         elif self.steps_beyond_done is None:
             # Pole just fell!
             self.steps_beyond_done = 0
@@ -249,7 +221,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             self.steps_beyond_done += 1
             reward = 0
 
-
         self.num_steps += 1
         self.last_action = action
         self.last_reward = reward
@@ -263,13 +234,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             return np.array(out_state, dtype=np.float32), reward, done, {}
 
 
-    def reset(
-        self,
-        *,
-        seed: Optional[int] = None,
-        return_info: bool = False,
-        options: Optional[dict] = None,
-    ):
+    def reset(self, *, seed: Optional[int] = None, return_info: bool = False, options: Optional[dict] = None):
         super().reset(seed=seed)
 
         #reset with slight perturbation
@@ -278,7 +243,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         self.state[2] = self.np_random.uniform(low = -2/180*pi, high = 2/180*pi)
             
         if self.swingup:
-
             #for evaluation purposes start always hanging
             #for training, start with an arbitary pole angle
             if self.evaluation:
@@ -287,32 +251,9 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             else:
                 self.state[2] = self.np_random.uniform(low=-pi, high=pi)
 
-
         #perturbate resistance parameters
         self.cart_resistance = self.mean_cart_resistance#np.random.uniform(low = self.mean_cart_resistance*0.95, high = self.mean_cart_resistance*1.05)
         self.pole_resistance = self.mean_pole_resistance#np.random.uniform(low = self.mean_pole_resistance*0.97, high = min(self.mean_pole_resistance*1.03,0.9999))
-
-
-
-        #used to train for multiple poles on one agent
-        """"
-        pend = self.np_random.randint(2)d
-
-        if pend == 0:
-
-            self.masspole = 0.127
-            self.total_mass = self.masspole + self.masscart
-            self.length = 0.1778  # actually half the pole's length
-            self.polemass_length = self.masspole * self.length
-
-        else:
-
-            self.masspole = 0.23
-            self.total_mass = self.masspole + self.masscart
-            self.length = 0.3302  # actually half the pole's length
-            self.polemass_length = self.masspole * self.length
-        """
-
 
         self.num_steps = 0
         self.steps_beyond_done = None
@@ -329,8 +270,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
             return out
         else:
             return out, {}
-
-
 
 
     def render(self, mode="human"):
@@ -370,12 +309,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
         gfxdraw.aapolygon(self.surf, cart_coords, (0, 0, 0))
         gfxdraw.filled_polygon(self.surf, cart_coords, (0, 0, 0))
 
-        l, r, t, b = (
-            -polewidth / 2,
-            polewidth / 2,
-            polelen - polewidth / 2,
-            -polewidth / 2,
-        )
+        l, r, t, b = (-polewidth / 2, polewidth / 2, polelen - polewidth / 2, -polewidth / 2)
 
         pole_coords = []
         for coord in [(l, b), (l, t), (r, t), (r, b)]:
@@ -417,9 +351,7 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
         #reward value
         gfxdraw.rectangle(self.surf, (20,20,20,80),(0,0,0))
-
         gfxdraw.box(self.surf, (20,20,20,self.last_reward*80),(0,0,0))
-
 
         self.surf = pygame.transform.flip(self.surf, False, True)
         self.screen.blit(self.surf, (0, 0))
@@ -442,7 +374,6 @@ class CartPoleEnv(gym.Env[np.ndarray, Union[int, np.ndarray]]):
 
 def angle_normalize(x):
     return ((x + np.pi) % (2 * np.pi)) - np.pi
-
 
 
 #not used, possible distribution for perturbating physical parameters
@@ -478,8 +409,5 @@ def sign(x):
 def sigmoid(x,tau):
     return 2/(1 + np.exp(-x*tau))-1
 
-
-
-   
 
 gin.parse_config_file('env_config.gin')
