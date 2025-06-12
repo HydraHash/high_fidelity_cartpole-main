@@ -4,13 +4,14 @@ import os
 import random
 import cartpole_realistic
 
-EPISODES = 10
-MAX_STEPS = 8
+EPISODES = 1000
+MAX_STEPS = 800
 
 env = gym.make("cartpole-realistic", evaluation=True, swingup=False)
 
 states = []
-actions =[]
+actions = []
+rewards = []
 next_states = []
 
 sequences =  [
@@ -26,6 +27,11 @@ def get_action_patterns():
         action_array.extend(sequences[n])
     return action_array
 
+def add_state_noise(state, val=0.01):
+    noise = np.random.normal(0, val, size=state.shape)
+    noisy_state = state + noise
+    return noisy_state
+
 
 for episode in range(EPISODES):
     obs = env.reset()
@@ -35,7 +41,8 @@ for episode in range(EPISODES):
     env.state[3] = 0.0
     obs = np.array(env.state, dtype = np.float32)
 
-    #Select actions to perform
+    noisy_state = add_state_noise(obs, 0.1)
+    obs = noisy_state
     pattern = get_action_patterns()
 
     for step in range(MAX_STEPS):
@@ -47,6 +54,7 @@ for episode in range(EPISODES):
 
         states.append(current_state)
         actions.append([action])
+        rewards.append(reward)
         next_states.append(next_state)
 
         if done:
@@ -55,7 +63,8 @@ for episode in range(EPISODES):
 #Save dataset
 states = np.array(states)
 actions = np.array(actions)
+rewards = np.array(rewards)
 next_states = np.array(next_states)
 
-np.savez("gp_training_upright.npz", states=states, actions=actions, next_states=next_states)
+np.savez("gp_training_upright.npz", states=states, actions=actions, rewards=rewards, next_states=next_states)
 print(f"Saved dataset with {states.shape[0]} samples to gp_training_upright.npz")
