@@ -3,36 +3,38 @@ import numpy as np
 import os
 import random
 import cartpole_realistic
+import math
 
-EPISODES = 1000
-MAX_STEPS = 800
+EPISODES = 10000
+MAX_STEPS = 400
+ANGLE_THRESHOLD_DEG = 40
+LEFT_ACTIONS = [2,3]
+RIGHT_ACTIONS = [5,6]
+ALL_ACTIONS = [0,1,2,3,4,5,6,7,8]
 
 env = gym.make("cartpole-realistic", evaluation=True, swingup=False)
 
-states = []
-actions = []
-rewards = []
-next_states = []
+max_total_steps = EPISODES * MAX_STEPS
+states = np.empty((max_total_steps, 4), dtype=np.float32)
+actions = np.empty((max_total_steps, 1), dtype=int)
+rewards = np.empty(max_total_steps, dtype=np.float32)
+next_states = np.empty((max_total_steps, 4), dtype=np.float32)
+state_index = 0
 
-sequences =  [
-    [4, 4, 4, 4], 
-    [3, 4, 4, 4], [3, 3, 4, 4], [5, 4, 4, 4], [5, 5, 4, 4],
-    [3, 4, 5, 4], [3, 3, 5, 4], [5, 4, 3, 4], [5, 5, 3, 4]
-]
-
-def get_action_patterns():
-    action_array = []
-    for _ in range(int(MAX_STEPS / 4)):
-        n = random.randint(0, 8)
-        action_array.extend(sequences[n])
-    return action_array
+def get_action_heuristic(angle, threshold):
+    if angle < -threshold:
+        return np.random.choice(LEFT_ACTIONS)
+    elif angle > threshold:
+        return np.random.choice(RIGHT_ACTIONS)
+    else:
+        return np.random.choice(ALL_ACTIONS)
 
 def add_state_noise(state, val=0.01):
     noise = np.random.normal(0, val, size=state.shape)
     noisy_state = state + noise
     return noisy_state
 
-
+threshold_rad = math.radians(ANGLE_THRESHOLD_DEG)
 for episode in range(EPISODES):
     obs = env.reset()
 
@@ -43,19 +45,20 @@ for episode in range(EPISODES):
 
     noisy_state = add_state_noise(obs, 0.1)
     obs = noisy_state
-    pattern = get_action_patterns()
 
     for step in range(MAX_STEPS):
-        action = pattern[step]
+        action = get_action_heuristic(env.state[2], threshold_rad)
         current_state = np.array(env.state, dtype=np.float32)
 
         next_obs, reward, done, info = env.step(action)
         next_state = np.array(env.state, dtype=np.float32)
 
-        states.append(current_state)
-        actions.append([action])
-        rewards.append(reward)
-        next_states.append(next_state)
+        states[state_index] = current_state
+        actions[state_index] = action
+        rewards[state_index] = reward
+        next_states[state_index] = next_state
+
+        state_index +=1
 
         if done:
             break
