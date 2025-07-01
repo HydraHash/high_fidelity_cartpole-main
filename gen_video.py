@@ -14,12 +14,28 @@ import PIL.Image
 import tensorflow as tf
 import cartpole_realistic
 import gym
+import numpy as np
+import math
 
 from tf_agents.environments import suite_gym
 from tf_agents.environments import tf_py_environment
 
 
 from tensorflow.python.client import device_lib
+
+EPISODES = 6
+MAX_STEPS = 100
+ANGLE_THRESHOLD_DEG = 10
+LEFT_ACTIONS = [2,1]
+RIGHT_ACTIONS = [7,6]
+ALL_ACTIONS = [0,1,2,3,4,5,6,7,8]
+
+max_total_steps = EPISODES * MAX_STEPS
+states = np.empty((max_total_steps, 4), dtype=np.float32)
+actions = np.empty((max_total_steps, 1), dtype=int)
+rewards = np.empty(max_total_steps, dtype=np.float32)
+next_states = np.empty((max_total_steps, 4), dtype=np.float32)
+state_index = 0
      
 
 env_name = "cartpole-realistic" # @param {type:"string"}
@@ -34,25 +50,50 @@ policy = tf.saved_model.load('policy')
 
 print('start gen video')
 
+def get_action_heuristic(angle, threshold):
+    if angle < -threshold:
+        return np.random.choice(LEFT_ACTIONS)
+    elif angle > threshold:
+        return np.random.choice(RIGHT_ACTIONS)
+    else:
+        return np.random.choice(ALL_ACTIONS)
 
-num_episodes = 1
+def add_state_noise(state, val=0.01):
+    noise = np.random.normal(0, val, size=state.shape)
+    noisy_state = state + noise
+    return noisy_state
+
 video_filename = 'pendulum.mp4'
+threshold_rad = math.radians(ANGLE_THRESHOLD_DEG)
+print("Threshold rad: ", threshold_rad, " negative:  ", -threshold_rad)
+
 with imageio.get_writer(video_filename, fps=50) as video:
-  for i in range(num_episodes):
-    print('episode: ', i)
-    time_step = eval_env.reset()
-    old_frame = None
-    video.append_data(eval_py_env.render())
-    i = 0
-    while not time_step.is_last() and i < 1000:
-        action_step = policy.action(time_step)
-        time_step = eval_env.step(action_step.action)
+    for episode in range(EPISODES):
+        print("episode: ", episode)
+        obs = eval_gym_env.reset()
 
-        frame = eval_py_env.render()
-        video.append_data(frame)
+        #Set pole upright
+        eval_gym_env.state[2] = 0.0
+        eval_gym_env.state[3] = 0.0
+        obs = np.array(eval_gym_env.state, dtype = np.float32)
 
-        old_frame = frame
-        i += 1
+        noisy_state = add_state_noise(obs, 0.1)
+        obs = noisy_state
+        print("Observation noisy state:", obs)
+    
+        video.append_data(eval_py_env.render())
 
+        for step in range(MAX_STEPS):
+            if 2.9 < eval_gym_env.state[2] < 3.2 or -3.2 < eval_gym_env.state[2] < -2.9:
+                print("break")
+                break
+            action = get_action_heuristic(eval_gym_env.state[2], threshold_rad)
+            current_state = np.array(eval_gym_env.state, dtype=np.float32)
+            
+            next_obs, reward, done, info = eval_gym_env.step(action)
+            print("Observation:", next_obs)
 
+            frame = eval_py_env.render()
+            video.append_data(frame)
 
+            old_frame = frame
