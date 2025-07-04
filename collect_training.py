@@ -23,7 +23,7 @@ from tf_agents.environments import tf_py_environment
 
 from tensorflow.python.client import device_lib
 
-EPISODES = 8
+EPISODES = 64
 MAX_STEPS = 80
 ANGLE_THRESHOLD_DEG = 5
 LEFT_ACTIONS = [0,1]
@@ -63,7 +63,7 @@ def add_state_noise(state, val=0.01):
     noisy_state = state + noise
     return noisy_state
 
-video_filename = 'pendulum.mp4'
+video_filename = 'training.mp4'
 threshold_rad = math.radians(ANGLE_THRESHOLD_DEG)
 print("Threshold rad: ", threshold_rad, " negative:  ", -threshold_rad)
 
