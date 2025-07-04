@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+from train_gp import ExactGPModel
 
 import os
 os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
@@ -10,12 +11,13 @@ import imageio
 import matplotlib
 import matplotlib.pyplot as plt
 import PIL.Image
+import numpy as np
 
 import tensorflow as tf
 import cartpole_realistic
 import gym
-import numpy as np
-import math
+import torch
+import gpytorch
 
 from tf_agents.environments import suite_gym
 from tf_agents.environments import tf_py_environment
@@ -23,20 +25,19 @@ from tf_agents.environments import tf_py_environment
 
 from tensorflow.python.client import device_lib
 
-EPISODES = 6
-MAX_STEPS = 100
-ANGLE_THRESHOLD_DEG = 10
-LEFT_ACTIONS = [2,1]
-RIGHT_ACTIONS = [7,6]
-ALL_ACTIONS = [0,1,2,3,4,5,6,7,8]
+def preprocess(path="gp_training_upright.npz"):
+    data = np.load(path)
+    states = data["states"]
+    actions = data["actions"].ravel()
 
-max_total_steps = EPISODES * MAX_STEPS
-states = np.empty((max_total_steps, 4), dtype=np.float32)
-actions = np.empty((max_total_steps, 1), dtype=int)
-rewards = np.empty(max_total_steps, dtype=np.float32)
-next_states = np.empty((max_total_steps, 4), dtype=np.float32)
-state_index = 0
-     
+    print(f"Number of actions: {len(actions)}")
+    print(f"Raw states shape: {states.shape}")
+    print(f"Raw actions shape: {actions.shape}")
+
+    return (
+        torch.tensor(states, dtype=torch.float32),
+        torch.tensor(actions, dtype=torch.float32),
+    ) 
 
 env_name = "cartpole-realistic" # @param {type:"string"}
 
@@ -46,54 +47,49 @@ eval_env = tf_py_environment.TFPyEnvironment(eval_py_env)
 
 print('load state')
 
-policy = tf.saved_model.load('policy')
+checkpoint = torch.load("gp_policy_model.pt")
+likelihood = gpytorch.likelihoods.GaussianLikelihood()
+train_x, train_y = preprocess()
+model = ExactGPModel(train_x, train_y, likelihood)
+model.load_state_dict(checkpoint["model_state_dict"])
+likelihood.load_state_dict(checkpoint["likelihood_state_dict"])
+
+model.eval()
+likelihood.eval()
 
 print('start gen video')
 
-def get_action_heuristic(angle, threshold):
-    if angle < -threshold:
-        return np.random.choice(LEFT_ACTIONS)
-    elif angle > threshold:
-        return np.random.choice(RIGHT_ACTIONS)
-    else:
-        return np.random.choice(ALL_ACTIONS)
+def gp_policy(state):
+    x = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+    print(f"Input to model: {x.shape}")
 
-def add_state_noise(state, val=0.01):
-    noise = np.random.normal(0, val, size=state.shape)
-    noisy_state = state + noise
-    return noisy_state
+    with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        observed_pred = likelihood(model(x))
+        mean = observed_pred.mean
+        
+        return int(round(mean.item()))
 
+
+num_episodes = 10
 video_filename = 'pendulum.mp4'
-threshold_rad = math.radians(ANGLE_THRESHOLD_DEG)
-print("Threshold rad: ", threshold_rad, " negative:  ", -threshold_rad)
-
 with imageio.get_writer(video_filename, fps=50) as video:
-    for episode in range(EPISODES):
-        print("episode: ", episode)
-        obs = eval_gym_env.reset()
+  for i in range(num_episodes):
+    print('episode: ', i)
+    time_step = eval_env.reset()
+    eval_gym_env.state[2] = 0.0
+    eval_gym_env.state[3] = 0.0
+    old_frame = None
+    video.append_data(eval_py_env.render())
+    i = 0
+    while not time_step.is_last() and i < 1000:
+        obs = time_step.observation.numpy()[0]
+        action_step = gp_policy(obs)
+        print("Action step: ", action_step)
+        time_step = eval_env.step(action_step)
+        print("Observation:", time_step.observation.numpy()[0])
+        
+        frame = eval_py_env.render()
+        video.append_data(frame)
 
-        #Set pole upright
-        eval_gym_env.state[2] = 0.0
-        eval_gym_env.state[3] = 0.0
-        obs = np.array(eval_gym_env.state, dtype = np.float32)
-
-        noisy_state = add_state_noise(obs, 0.1)
-        obs = noisy_state
-        print("Observation noisy state:", obs)
-    
-        video.append_data(eval_py_env.render())
-
-        for step in range(MAX_STEPS):
-            if 2.9 < eval_gym_env.state[2] < 3.2 or -3.2 < eval_gym_env.state[2] < -2.9:
-                print("break")
-                break
-            action = get_action_heuristic(eval_gym_env.state[2], threshold_rad)
-            current_state = np.array(eval_gym_env.state, dtype=np.float32)
-            
-            next_obs, reward, done, info = eval_gym_env.step(action)
-            print("Observation:", next_obs)
-
-            frame = eval_py_env.render()
-            video.append_data(frame)
-
-            old_frame = frame
+        old_frame = frame
+        i += 1
