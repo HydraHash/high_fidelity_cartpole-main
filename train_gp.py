@@ -1,6 +1,10 @@
 import numpy as np
 import torch
 import gpytorch
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import math
 
 # 1) Multiclass GP model for classification
 class ExactGPModel(gpytorch.models.ExactGP):
@@ -60,13 +64,45 @@ if __name__ == "__main__":
         output = model(train_x)
         loss = -mll(output, train_y)
         loss.backward()
+        print('Iter %d/%d - Loss: %.3f   lengthscale: %.3f   noise: %.3f' % (
+            epoch + 1, num_epochs+1, loss.item(),
+            model.covar_module.base_kernel.lengthscale.item(),
+            model.likelihood.noise.item()
+        ))
         optimizer.step()
-
-        if epoch % 10 == 0 or epoch == 1:
-            print(f"Epoch {epoch:3d}/{num_epochs} — Loss: {loss.item():.4f}")
 
     # Save trained model + likelihood
     torch.save({
         'model_state_dict': model.state_dict(),
         'likelihood_state_dict': likelihood.state_dict(),
+        'train_x': train_x,
+        'train_y': train_y
     }, "gp_policy_model.pt")
+    print("Model saved as gp_policy_model.pt")
+
+    baseline = torch.tensor([0.0, 0.0, 0.0, 0.0])
+    theta_vals = torch.linspace(-math.pi, math.pi, 100)
+    test_x = baseline.repeat(100, 1)
+    test_x[:, 2] = theta_vals
+
+    model.eval()
+    likelihood.eval()
+    with torch.no_grad(), gpytorch.settings.fast_pred_var():
+        observed_pred = likelihood(model(test_x))
+
+    # Extract predictions
+    mean = observed_pred.mean.numpy()
+    lower, upper = observed_pred.confidence_region()
+    lower = lower.numpy()
+    upper = upper.numpy()
+
+    # Plot
+    plt.figure(figsize=(10, 6))
+    plt.plot(theta_vals.numpy(), mean, label='Mean prediction')
+    plt.fill_between(theta_vals.numpy(), lower, upper, alpha=0.3, label='Confidence')
+    plt.xlabel("Pole angle θ (radians)")
+    plt.ylabel("Predicted value (e.g., action)")
+    plt.title("GP prediction vs. pole angle (others fixed)")
+    plt.legend()
+    plt.grid(True)
+    plt.savefig("gp_prediction_plot.png")
