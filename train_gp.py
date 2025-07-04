@@ -54,11 +54,11 @@ if __name__ == "__main__":
 
     optimizer = torch.optim.Adam([
         {'params': model.parameters()}
-    ], lr=0.1)
+    ], lr=0.01)
 
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
-    num_epochs = 200
+    num_epochs = 300
     for epoch in range(1, num_epochs + 1):
         optimizer.zero_grad()
         output = model(train_x)
@@ -81,7 +81,7 @@ if __name__ == "__main__":
     print("Model saved as gp_policy_model.pt")
 
     baseline = torch.tensor([0.0, 0.0, 0.0, 0.0])
-    theta_vals = torch.linspace(-math.pi, math.pi, 100)
+    theta_vals = torch.linspace(-0.5, 0.5, 100)
     test_x = baseline.repeat(100, 1)
     test_x[:, 2] = theta_vals
 
@@ -106,3 +106,4 @@ if __name__ == "__main__":
     plt.legend()
     plt.grid(True)
     plt.savefig("gp_prediction_plot.png")
+    print("Plot saved as gp_prediction_plot.png")
